@@ -1,39 +1,57 @@
 local M = {
-	description = "Use tar to generate an archive"
+	description = "Generate an archive from built files"
 }
 
 function M.initialize(self, build)
 	self.install_prefix = build:path_option(
-		"package-tar-install-prefix",
+		"package-archive-install-prefix",
 		"Prefix to add to file names",
 		build:path_option(
 			"package-install-prefix",
-			"Install prefix for package generation",
-			Path:new(".")
-		)
+			"Install prefix for package generation"
+		) or Path:new(".")
 	)
 	self.package_name = build:string_option(
-		"package-tar-name",
-		"Name of the archive"
-	)
-
-	if self.package_name == nil then
-		self.package_name = build:string_option(
+		"package-archive-name",
+		"Name of the archive",
+		build:string_option(
 			"package-name",
-			"Name of the package",
-			"package"
-		)
-	end
+			"Name of the package"
+		) or 'package'
+	)
+	self.format = build:string_option(
+		"package-archive-format",
+		"Archive type ('zip' or 'tgz')",
+		build:host():os() == Platform.OS.windows and 'zip' or 'tgz'
+	):lower()
+	self.zip_program = build:path_option(
+		"package-archive-zip-program",
+		"Path to the zip executable",
+		build:fs():which("zip")
+	)
+	self.tar_program = build:path_option(
+		"package-archive-tar-program",
+		"Path to the tar executable",
+		build:fs():which("tar")
+	)
 end
 
 function M.finalize(self, build)
 	local rule = Rule:new()
-	local archive = build:target_node(Path:new(self.package_name .. ".tgz"))
+	local archive = build:target_node(Path:new(self.package_name .. "." .. self.format))
 	rule:add_target(archive)
-	local cmd = {build:fs():which("tar"), "-cjf", archive,}
+	rule:add_target(build:virtual_node('package'))
+	local cmd
+	if self.format == 'zip' then
+		cmd = {self.zip_program, "-r", archive,}
+	elseif self.format == 'tgz' then
+		cmd = {self.tar_program, "-cjf", archive,}
+	else
+		build:error("Unknown compression format '" .. self.format .. "'")
+	end
 	build:visit_targets(function(node)
 		if node:property("install") then
-			print("node", node)
+			build:debug("package.archive", node:relative_path(build:directory()))
 			rule:add_source(node)
 			table.append(cmd, node)
 		end
