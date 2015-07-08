@@ -29,6 +29,11 @@ function M.initialize(self, build)
 		"Path to the zip executable",
 		build:fs():which("zip")
 	)
+	self.seven_zip_program = build:path_option(
+		"package-archive-7z-program",
+		"Path to the 7z executable",
+		build:fs():which('7z')
+	)
 	self.tar_program = build:path_option(
 		"package-archive-tar-program",
 		"Path to the tar executable",
@@ -40,10 +45,15 @@ function M.finalize(self, build)
 	local rule = Rule:new()
 	local archive = build:target_node(Path:new(self.package_name .. "." .. self.format))
 	rule:add_target(archive)
-	rule:add_target(build:virtual_node('package'))
 	local cmd
 	if self.format == 'zip' then
-		cmd = {self.zip_program, "-r", archive,}
+		if self.zip_program ~= nil then
+			cmd = {self.zip_program, "-r", archive,}
+		elseif self.seven_zip_program ~= nil then
+			cmd = {self.seven_zip_program, "a", archive,}
+		else
+			build:error("Cannot find suitable program to zip (please install zip or 7z)")
+		end
 	elseif self.format == 'tgz' then
 		cmd = {self.tar_program, "-cjf", archive,}
 	else
@@ -56,8 +66,15 @@ function M.finalize(self, build)
 			table.append(cmd, node)
 		end
 	end)
-	rule:add_shell_command(ShellCommand:new(table.unpack(cmd)))
+	cmd = ShellCommand:new(table.unpack(cmd))
+	cmd:working_directory(build:directory())
+	rule:add_shell_command(cmd)
 	build:add_rule(rule)
+	build:add_rule(
+		Rule:new()
+			:add_target(build:virtual_node('package'))
+			:add_source(archive)
+	)
 end
 
 
