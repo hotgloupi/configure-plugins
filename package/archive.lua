@@ -43,9 +43,8 @@ end
 
 function M.finalize(self, build)
 	local rule = Rule:new()
-	local archive = build:target_node(Path:new(self.package_name .. "." .. self.format))
-	rule:add_target(archive)
 	local cmd
+	local archive = Path:new(self.package_name .. "." .. self.format)
 	if self.format == 'zip' then
 		if self.zip_program ~= nil then
 			cmd = {self.zip_program, "-r", archive,}
@@ -55,7 +54,7 @@ function M.finalize(self, build)
 			build:error("Cannot find suitable program to zip (please install zip or 7z)")
 		end
 	elseif self.format == 'tgz' then
-		cmd = {self.tar_program, "-cjf", archive,}
+		cmd = {self.tar_program, "-cjhf", archive,}
 	else
 		build:error("Unknown compression format '" .. self.format .. "'")
 	end
@@ -66,6 +65,8 @@ function M.finalize(self, build)
 			table.append(cmd, node)
 		end
 	end)
+	archive = build:target_node(archive)
+	rule:add_target(archive)
 	cmd = ShellCommand:new(table.unpack(cmd))
 	cmd:working_directory(build:directory())
 	rule:add_shell_command(cmd)
